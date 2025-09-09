@@ -1,75 +1,208 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { Ionicons } from "@expo/vector-icons";
+import React, { useEffect, useState } from "react";
+import {
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-import { HelloWave } from '@/components/HelloWave';
-import ParallaxScrollView from '@/components/ParallaxScrollView';
-import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-
-export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
-  );
+interface TimeLog {
+  id: string;
+  type: "clockIn" | "clockOut";
+  date: string;
+  time: string;
 }
 
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});
+// ✅ Utility function to format time with padded hours
+const formatTime = (date: Date): string => {
+  let hours = date.getHours();
+  const minutes = date.getMinutes();
+  const isPM = hours >= 12;
+
+  // Convert to 12-hour format
+  hours = hours % 12 || 12;
+
+  // Pad hours and minutes
+  const hourStr = hours.toString().padStart(2, "0");
+  const minuteStr = minutes.toString().padStart(2, "0");
+
+  return `${hourStr}:${minuteStr} ${isPM ? "PM" : "AM"}`;
+};
+
+// ✅ Utility function to format date
+const formatDate = (date: Date): string => {
+  return date.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const Dashboard = () => {
+  const [currentTime, setCurrentTime] = useState("");
+  const [isClocked, setIsClocked] = useState(false);
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([
+    {
+      id: "1",
+      type: "clockOut",
+      date: "Monday, July 15, 2024",
+      time: "05:00 PM",
+    },
+    {
+      id: "2",
+      type: "clockIn",
+      date: "Monday, July 15, 2024",
+      time: "08:00 AM",
+    },
+  ]);
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(formatTime(now));
+    };
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleClockIn = () => {
+    const now = new Date();
+
+    const newLog: TimeLog = {
+      id: Date.now().toString(),
+      type: "clockIn",
+      date: formatDate(now),
+      time: formatTime(now),
+    };
+
+    setTimeLogs([newLog, ...timeLogs]);
+    setIsClocked(true);
+  };
+
+  const handleClockOut = () => {
+    const now = new Date();
+
+    const newLog: TimeLog = {
+      id: Date.now().toString(),
+      type: "clockOut",
+      date: formatDate(now),
+      time: formatTime(now),
+    };
+
+    setTimeLogs([newLog, ...timeLogs]);
+    setIsClocked(false);
+  };
+
+  const renderTimeLogIcon = (type: "clockIn" | "clockOut") => {
+    return (
+      <View
+        className={`w-12 h-12 rounded-xl justify-center items-center mr-4 ${
+          type === "clockIn" ? "bg-green-50" : "bg-red-50"
+        }`}
+      >
+        <Ionicons
+          name={type === "clockIn" ? "arrow-down" : "arrow-up"}
+          size={22}
+          color={type === "clockIn" ? "#22c55e" : "#ef4444"}
+        />
+      </View>
+    );
+  };
+
+  return (
+    <SafeAreaView className="flex-1 bg-white">
+      <StatusBar backgroundColor="white" barStyle="dark-content" />
+
+      {/* Header */}
+      <View className="flex-row items-center justify-between px-5 py-4 bg-white">
+        <View className="w-10" />
+
+        <Text className="text-2xl font-bold text-gray-800 text-center flex-1">
+          AttendEase
+        </Text>
+
+        <TouchableOpacity className="w-10 h-10 justify-center items-center">
+          <Ionicons name="settings-sharp" size={24} />
+        </TouchableOpacity>
+      </View>
+
+      <View className="flex-1 bg-gray-50">
+        <ScrollView
+          className="flex-1 px-5"
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Current Time Section */}
+          <View className="items-center my-8">
+            <Text className="text-xl font-semibold text-gray-500 mb-2">
+              Current Time
+            </Text>
+            <Text className="text-6xl font-extrabold text-gray-800">
+              {currentTime}
+            </Text>
+          </View>
+
+          {/* Clock In/Out Buttons */}
+          <View className="flex-row justify-between mb-10 gap-4">
+            <TouchableOpacity
+              className={`flex-1 h-32 rounded-2xl justify-center items-center shadow-sm gap-1 ${
+                isClocked ? "bg-gray-300" : "bg-green-500"
+              }`}
+              onPress={handleClockIn}
+              disabled={isClocked}
+            >
+              <Ionicons name="enter" color={"white"} size={35} />
+              <Text className="text-xl font-bold text-white">Clock In</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className={`flex-1 h-32 rounded-2xl justify-center items-center shadow-sm gap-1 ${
+                !isClocked ? "bg-white" : "bg-gray-400"
+              }`}
+              onPress={handleClockOut}
+              disabled={!isClocked}
+            >
+              <Ionicons name="exit" color={"gray"} size={35} />
+              <Text className="text-xl font-bold text-gray-600">Clock Out</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Recent Time Logs */}
+          <View className="mb-8">
+            <Text className="text-xl font-bold text-gray-800 mb-5">
+              Recent Time Logs
+            </Text>
+
+            {timeLogs.map((log) => (
+              <View
+                key={log.id}
+                className="flex-row items-center bg-white py-4 px-4 rounded-xl mb-3 shadow-sm"
+              >
+                {renderTimeLogIcon(log.type)}
+
+                <View className="flex-1">
+                  <Text className="text-base font-bold text-gray-800 mb-0.5">
+                    {log.type === "clockIn" ? "Clock In" : "Clock Out"}
+                  </Text>
+                  <Text className="text-sm text-gray-500">{log.date}</Text>
+                </View>
+
+                <Text className="text-base font-bold text-gray-800">
+                  {log.time}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </ScrollView>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+export default Dashboard;
