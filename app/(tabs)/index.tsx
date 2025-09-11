@@ -45,20 +45,7 @@ const formatDate = (date: Date): string => {
 const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState("");
   const [isClocked, setIsClocked] = useState(false);
-  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([
-    {
-      id: "1",
-      type: "clockOut",
-      date: "Monday, July 15, 2024",
-      time: "05:00 PM",
-    },
-    {
-      id: "2",
-      type: "clockIn",
-      date: "Monday, July 15, 2024",
-      time: "08:00 AM",
-    },
-  ]);
+  const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
 
   useEffect(() => {
     const updateTime = () => {
@@ -70,6 +57,44 @@ const Dashboard = () => {
     const interval = setInterval(updateTime, 1000);
 
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const fetchAttendance = async () => {
+      try {
+        // Need Authorization header for real API calls
+        const response = await fetch("http://127.0.0.1:8000/api/attendance");
+        const data = await response.json();
+
+        const mappedLogs: TimeLog[] = data
+          .map((item: any) => {
+            const clockInDate = new Date(item.clock_in);
+            const clockOutDate = new Date(item.clock_out);
+
+            return [
+              {
+                id: `${item.id}-clockOut`,
+                type: "clockOut",
+                date: formatDate(clockOutDate),
+                time: formatTime(clockOutDate),
+              },
+              {
+                id: `${item.id}-clockIn`,
+                type: "clockIn",
+                date: formatDate(clockInDate),
+                time: formatTime(clockInDate),
+              },
+            ];
+          })
+          .flat();
+
+        setTimeLogs(mappedLogs);
+      } catch (error) {
+        console.error("Error fetching attendance data:", error);
+      }
+    };
+
+    fetchAttendance();
   }, []);
 
   const handleClockIn = () => {
