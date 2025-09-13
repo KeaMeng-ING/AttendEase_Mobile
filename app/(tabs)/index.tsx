@@ -1,6 +1,8 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
+  Alert,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -46,6 +48,9 @@ const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState("");
   const [isClocked, setIsClocked] = useState(false);
   const [timeLogs, setTimeLogs] = useState<TimeLog[]>([]);
+  const [attendanceId, setAttendanceId] = useState<number | null>(null);
+  const [finish, setFinish] = useState(false);
+  const { token } = useAuth();
 
   useEffect(() => {
     const updateTime = () => {
@@ -62,8 +67,12 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchAttendance = async () => {
       try {
-        // Need Authorization header for real API calls
-        const response = await fetch("http://127.0.0.1:8000/api/attendance");
+        const response = await fetch("http://127.0.0.1:8000/api/attendance", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
         const data = await response.json();
 
         const mappedLogs: TimeLog[] = data
@@ -97,32 +106,113 @@ const Dashboard = () => {
     fetchAttendance();
   }, []);
 
-  const handleClockIn = () => {
-    const now = new Date();
+  useEffect(() => {
+    const checkClockedInStatus = async () => {
+      try {
+        const response = await fetch(
+          "http://127.0.0.1:8000/api/attendance/current",
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        const data = await response.json();
 
-    const newLog: TimeLog = {
-      id: Date.now().toString(),
-      type: "clockIn",
-      date: formatDate(now),
-      time: formatTime(now),
+        if (data.clock_in && data.clock_out) {
+          setFinish(true);
+          return;
+        } else if (data.clock_in) {
+          setIsClocked(true);
+          setAttendanceId(data.id);
+        }
+      } catch (error) {
+        console.error("Error checking clocked-in status:", error);
+      }
     };
 
-    setTimeLogs([newLog, ...timeLogs]);
-    setIsClocked(true);
+    checkClockedInStatus();
+  }, []);
+
+  const handleClockIn = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/clock_in", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const now = new Date();
+        const newLog: TimeLog = {
+          id: Date.now().toString(),
+          type: "clockIn",
+          date: formatDate(now),
+          time: formatTime(now),
+        };
+
+        setTimeLogs([newLog, ...timeLogs]);
+        setIsClocked(true);
+        setAttendanceId((await response.json()).attendance_id);
+      }
+    } catch (error) {
+      console.error("Error during clock-in:", error);
+    }
   };
 
-  const handleClockOut = () => {
-    const now = new Date();
+  const handleClockOut = async () => {
+    Alert.alert(
+      "Confirm Clock Out",
+      "Are you sure you want to clock out?",
+      [
+        {
+          text: "Cancel",
+          style: "cancel",
+        },
+        {
+          text: "Clock Out",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const response = await fetch(
+                `http://127.0.0.1:8000/api/clock_out/${attendanceId}`,
+                {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                  },
+                }
+              );
 
-    const newLog: TimeLog = {
-      id: Date.now().toString(),
-      type: "clockOut",
-      date: formatDate(now),
-      time: formatTime(now),
-    };
+              if (response.ok) {
+                const now = new Date();
+                const newLog: TimeLog = {
+                  id: Date.now().toString(),
+                  type: "clockOut",
+                  date: formatDate(now),
+                  time: formatTime(now),
+                };
 
-    setTimeLogs([newLog, ...timeLogs]);
-    setIsClocked(false);
+                setTimeLogs([newLog, ...timeLogs]);
+                setIsClocked(false);
+                setFinish(true);
+              } else {
+                const errorText = await response.text();
+                console.error("Clock-out failed:", errorText);
+              }
+            } catch (error) {
+              console.error("Clock out error:", error);
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
   };
 
   const renderTimeLogIcon = (type: "clockIn" | "clockOut") => {
@@ -149,7 +239,7 @@ const Dashboard = () => {
       <View className="flex-row items-center justify-between px-5 py-4 bg-white">
         <View className="w-10" />
 
-        <Text className="text-2xl font-bold text-gray-800 text-center flex-1">
+        <Text className="text-2xl font-bold text-blue-500 text-center flex-1">
           AttendEase
         </Text>
 
@@ -163,40 +253,64 @@ const Dashboard = () => {
           className="flex-1 px-5"
           showsVerticalScrollIndicator={false}
         >
-          {/* Current Time Section */}
-          <View className="items-center my-8">
-            <Text className="text-xl font-semibold text-gray-500 mb-2">
-              Current Time
-            </Text>
-            <Text className="text-6xl font-extrabold text-gray-800">
-              {currentTime}
-            </Text>
-          </View>
+          {!finish ? (
+            <>
+              <View className="items-center mt-8">
+                <Text className="text-xl font-semibold text-gray-500 mb-2">
+                  Current Time
+                </Text>
+                <Text className="text-6xl font-extrabold text-gray-800">
+                  {currentTime}
+                </Text>
+              </View>
 
-          {/* Clock In/Out Buttons */}
-          <View className="flex-row justify-between mb-10 gap-4">
-            <TouchableOpacity
-              className={`flex-1 h-32 rounded-2xl justify-center items-center shadow-sm gap-1 ${
-                isClocked ? "bg-gray-300" : "bg-green-500"
-              }`}
-              onPress={handleClockIn}
-              disabled={isClocked}
-            >
-              <Ionicons name="enter" color={"white"} size={35} />
-              <Text className="text-xl font-bold text-white">Clock In</Text>
-            </TouchableOpacity>
+              <View className="flex-row justify-between mb-10 gap-4 mt-8">
+                <TouchableOpacity
+                  className={`flex-1 h-32 rounded-2xl justify-center items-center shadow-sm gap-1 ${
+                    isClocked ? "bg-gray-300" : "bg-green-500"
+                  }`}
+                  onPress={handleClockIn}
+                  disabled={isClocked}
+                >
+                  <Ionicons name="enter" color={"white"} size={35} />
+                  <Text className="text-xl font-bold text-white">Clock In</Text>
+                </TouchableOpacity>
 
-            <TouchableOpacity
-              className={`flex-1 h-32 rounded-2xl justify-center items-center shadow-sm gap-1 ${
-                !isClocked ? "bg-white" : "bg-gray-400"
-              }`}
-              onPress={handleClockOut}
-              disabled={!isClocked}
-            >
-              <Ionicons name="exit" color={"gray"} size={35} />
-              <Text className="text-xl font-bold text-gray-600">Clock Out</Text>
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity
+                  className={`flex-1 h-32 rounded-2xl justify-center items-center shadow-sm gap-1 ${
+                    !isClocked ? "bg-white" : "bg-red-500"
+                  }`}
+                  onPress={handleClockOut}
+                  disabled={!isClocked}
+                >
+                  <Ionicons
+                    name="exit"
+                    color={!isClocked ? "gray" : "white"}
+                    size={35}
+                  />
+                  <Text
+                    className={`text-xl font-bold ${
+                      !isClocked ? "text-gray-600" : "text-white"
+                    }`}
+                  >
+                    Clock Out
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <View className="items-center mb-10 mt-3 px-6">
+              <View className="bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm items-center">
+                <Ionicons name="checkmark-circle" size={48} color="#3B82F6" />
+                <Text className="text-2xl font-bold text-gray-800 mt-4">
+                  Enjoy your day 🎉!
+                </Text>
+                <Text className="text-md font-medium text-gray-600 mt-2 text-center">
+                  You have successfully completed your attendance for today.
+                </Text>
+              </View>
+            </View>
+          )}
 
           {/* Recent Time Logs */}
           <View className="mb-8">
