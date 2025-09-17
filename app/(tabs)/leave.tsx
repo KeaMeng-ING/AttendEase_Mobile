@@ -2,7 +2,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { Picker } from "@react-native-picker/picker";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -24,14 +24,14 @@ interface LeaveRequest {
   endDate: Date;
   reason: string;
   status: "pending" | "approved" | "rejected";
-  appliedDate: Date;
+  created_at: Date;
 }
 
 const LEAVE_TYPES = [
   { label: "Select Leave Type", value: "" },
-  { label: "Annual Leave", value: "annual" },
-  { label: "Sick Leave", value: "sick" },
-  { label: "Casual Leave", value: "casual" },
+  { label: "Annual Leave", value: "Annual Leave" },
+  { label: "Sick Leave", value: "Sick Leave" },
+  { label: "Casual Leave", value: "Casual Leave" },
 ];
 
 export default function LeaveScreen() {
@@ -43,28 +43,45 @@ export default function LeaveScreen() {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showEndPicker, setShowEndPicker] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([
-    {
-      id: "1",
-      leaveType: "Annual Leave",
-      startDate: new Date("2024-03-15"),
-      endDate: new Date("2024-03-17"),
-      reason: "Family vacation",
-      status: "approved",
-      appliedDate: new Date("2024-03-01"),
-    },
-    {
-      id: "2",
-      leaveType: "Sick Leave",
-      startDate: new Date("2024-03-20"),
-      endDate: new Date("2024-03-20"),
-      reason: "Medical appointment",
-      status: "pending",
-      appliedDate: new Date("2024-03-18"),
-    },
-  ]);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
   const { token } = useAuth();
+
+  const fetchLeaveRequests = async () => {
+    try {
+      const response = await fetch("http://127.0.0.1:8000/api/leave_request", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const formattedRequests: LeaveRequest[] = data.map((item: any) => ({
+          id: item.id,
+          leaveType: item.leave_type.name,
+          startDate: new Date(item.start_date),
+          endDate: new Date(item.end_date),
+          reason: item.reason,
+          status: item.status,
+          created_at: new Date(item.created_at),
+        }));
+
+        setLeaveRequests(formattedRequests);
+      } else {
+        throw new Error("Failed to fetch leave requests");
+      }
+    } catch (error) {
+      console.error("Error fetching leave requests:", error);
+      Alert.alert("Error", "Failed to load leave requests. Please try again.");
+    }
+  };
+
+  useEffect(() => {
+    fetchLeaveRequests();
+  }, [token]);
 
   const formatDate = (date: Date): string => {
     return date.toLocaleDateString("en-US", {
@@ -115,15 +132,38 @@ export default function LeaveScreen() {
     setIsLoading(true);
 
     try {
+      // Fetch the leave type ID based on the selected leave type
+      const leaveTypeResponse = await fetch(
+        `http://127.0.0.1:8000/api/leave_type`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!leaveTypeResponse.ok) {
+        throw new Error("Failed to fetch leave types");
+      }
+
+      const leaveTypesData = await leaveTypeResponse.json();
+      const selectedLeaveType = leaveTypesData.find(
+        (type: { name: string }) => type.name === leaveType
+      );
+
+      const leaveTypeId = selectedLeaveType ? selectedLeaveType.id : null;
+
       const requestData = {
-        leave_type: leaveType,
+        leave_type_id: leaveTypeId,
         start_date: startDate.toISOString().split("T")[0],
         end_date: endDate.toISOString().split("T")[0],
         reason: reason.trim(),
       };
 
-      // API call to submit leave request
-      const response = await fetch("http://127.0.0.1:8000/api/leave-requests", {
+      // Post the leave request
+      const response = await fetch("http://127.0.0.1:8000/api/leave_request", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -133,30 +173,31 @@ export default function LeaveScreen() {
       });
 
       if (response.ok) {
-        const newRequest: LeaveRequest = {
-          id: Date.now().toString(),
-          leaveType:
-            LEAVE_TYPES.find((type) => type.value === leaveType)?.label ||
-            leaveType,
-          startDate,
-          endDate,
-          reason: reason.trim(),
-          status: "pending",
-          appliedDate: new Date(),
-        };
-
-        setLeaveRequests([newRequest, ...leaveRequests]);
-
-        // Reset form
-        setLeaveType("");
-        setStartDate(new Date());
-        setEndDate(new Date());
-        setReason("");
-        setShowRequestForm(false);
-
-        Alert.alert("Success", "Leave request submitted successfully!");
+        // Show success message
+        Alert.alert(
+          "Success",
+          "Your leave request has been submitted successfully!",
+          [
+            {
+              text: "OK",
+              onPress: () => {
+                // Close the form and refresh the list
+                setShowRequestForm(false);
+                // Reset form
+                setLeaveType("");
+                setStartDate(new Date());
+                setEndDate(new Date());
+                setReason("");
+                // Refresh the entire list from server
+                fetchLeaveRequests();
+              },
+            },
+          ]
+        );
       } else {
-        throw new Error("Failed to submit leave request");
+        const errorData = await response.json().catch(() => ({}));
+        console.error("Submit error:", errorData);
+        throw new Error(errorData.message || "Failed to submit leave request");
       }
     } catch (error) {
       console.error("Error submitting leave request:", error);
@@ -219,9 +260,9 @@ export default function LeaveScreen() {
               </Text>
             </View>
           ) : (
-            leaveRequests.map((request) => (
+            leaveRequests.map((request, index) => (
               <View
-                key={request.id}
+                key={`${request.id}-${index}`}
                 className="bg-white rounded-xl p-5 mb-3 shadow-sm border border-gray-100"
               >
                 <View className="flex-row justify-between items-start mb-3">
@@ -268,7 +309,7 @@ export default function LeaveScreen() {
 
                 <View className="flex-row justify-between items-center pt-3 border-t border-gray-100">
                   <Text className="text-gray-500 text-sm">
-                    Applied: {formatDate(request.appliedDate)}
+                    Applied: {formatDate(request.created_at)}
                   </Text>
                   <Text className="text-gray-500 text-sm font-medium">
                     {calculateDays(request.startDate, request.endDate)} day
