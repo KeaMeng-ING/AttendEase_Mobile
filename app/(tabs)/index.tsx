@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { formatDate, formatPadTime } from "@/utils/formatters";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
 import {
@@ -18,32 +19,6 @@ interface TimeLog {
   time: string;
 }
 
-// ✅ Utility function to format time with padded hours
-const formatTime = (date: Date): string => {
-  let hours = date.getHours();
-  const minutes = date.getMinutes();
-  const isPM = hours >= 12;
-
-  // Convert to 12-hour format
-  hours = hours % 12 || 12;
-
-  // Pad hours and minutes
-  const hourStr = hours.toString().padStart(2, "0");
-  const minuteStr = minutes.toString().padStart(2, "0");
-
-  return `${hourStr}:${minuteStr} ${isPM ? "PM" : "AM"}`;
-};
-
-// ✅ Utility function to format date
-const formatDate = (date: Date): string => {
-  return date.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
-};
-
 const Dashboard = () => {
   const [currentTime, setCurrentTime] = useState("");
   const [isClocked, setIsClocked] = useState(false);
@@ -55,7 +30,7 @@ const Dashboard = () => {
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      setCurrentTime(formatTime(now));
+      setCurrentTime(formatPadTime(now));
     };
 
     updateTime();
@@ -85,13 +60,13 @@ const Dashboard = () => {
                 id: `${item.id}-clockOut`,
                 type: "clockOut",
                 date: formatDate(clockOutDate),
-                time: formatTime(clockOutDate),
+                time: formatPadTime(clockOutDate),
               },
               {
                 id: `${item.id}-clockIn`,
                 type: "clockIn",
                 date: formatDate(clockInDate),
-                time: formatTime(clockInDate),
+                time: formatPadTime(clockInDate),
               },
             ];
           })
@@ -152,7 +127,7 @@ const Dashboard = () => {
           id: Date.now().toString(),
           type: "clockIn",
           date: formatDate(now),
-          time: formatTime(now),
+          time: formatPadTime(now),
         };
 
         setTimeLogs([newLog, ...timeLogs]);
@@ -195,7 +170,7 @@ const Dashboard = () => {
                   id: Date.now().toString(),
                   type: "clockOut",
                   date: formatDate(now),
-                  time: formatTime(now),
+                  time: formatPadTime(now),
                 };
 
                 setTimeLogs([newLog, ...timeLogs]);
